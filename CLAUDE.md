@@ -3,8 +3,12 @@
 ## IMPORTANT: AFTER REVIEWING THIS FILE
 After reviewing this file, IMMEDIATELY read the `/docs/START_HERE.md` document to understand the project goals, structure, and current development status. Then review `/docs/development-guide.md` for detailed implementation status and next steps.
 
-## CRITICAL TESTING RULE
-ALL TESTS MUST PASS BEFORE COMMITTING CODE TO THE REPOSITORY.
+## CRITICAL TESTING RULES
+1. ALL TESTS MUST PASS BEFORE COMMITTING CODE TO THE REPOSITORY.
+
+2. FOCUS ON HAPPY PATH TESTING ONLY. Do not create tests for error conditions or edge cases. Tests should verify that components and services work correctly under normal, expected conditions.
+
+3. AVOID OVERLY GRANULAR TESTS. Each test should verify meaningful functionality rather than implementation details. Keep tests simple and maintainable.
 
 You MUST test in small increments rather than making large batches of changes. Run tests frequently during development to catch issues early. Follow a test-driven approach where possible.
 

@@ -74,6 +74,16 @@ Run end-to-end tests:
 npm run test:e2e
 ```
 
+#### Testing Guidelines
+
+This project follows specific testing principles:
+
+1. **Focus on Happy Path**: Tests should only verify correct behavior under normal, expected conditions. Do not write tests for error handling or edge cases.
+
+2. **Avoid Granular Tests**: Tests should focus on meaningful functionality rather than implementation details. Keep tests simple and maintainable.
+
+3. **All Tests Must Pass**: Before committing any code, ensure that all tests pass successfully. Run tests frequently during development.
+
 ### Building for Production
 
 Build the application for production deployment:

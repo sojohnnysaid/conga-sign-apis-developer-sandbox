@@ -130,9 +130,11 @@ A reset mechanism allows clearing state to quickly return to a clean starting po
 ### Testing Approach
 
 - **IMPORTANT**: All tests MUST pass before committing to the repository
+- **FOCUS ON HAPPY PATH**: Tests should only verify correct behavior under normal conditions, not error handling or edge cases
+- **AVOID OVERLY GRANULAR TESTS**: Focus on meaningful functionality, not implementation details
 - Test frequently in small increments rather than large batches
 - Run `npm test` to run all tests
-- The focus is on unit testing service classes first
+- The focus is on unit testing service classes and main component functionality
 
 ### Environment Configuration
 
@@ -155,10 +157,11 @@ The application supports three regional environments:
 
 ### Next Development Steps
 
-1. Improve test coverage for edge cases:
-   - Add more comprehensive tests for ConfigManager error handling
-   - Create tests for CongaApiClient API interactions
-   - Add tests for TransactionManager lifecycle methods
+1. Extend happy path test coverage:
+   - Add simple tests for ConfigManager main functionality
+   - Create tests for essential CongaApiClient API interactions
+   - Add tests for primary TransactionManager workflows
+   - Remember to focus only on happy paths, not error cases
    
 2. Implement E2E tests for key user flows:
    - Configuration and authentication flow
