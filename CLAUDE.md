@@ -1,15 +1,22 @@
 # CLAUDE.md for Conga-Sign-APIs-Developer-Sandbox
 
 ## IMPORTANT: AFTER REVIEWING THIS FILE
-After reviewing this file, IMMEDIATELY read the `/docs/START_HERE.md` document to understand the project goals, structure, and current development status. That document contains the detailed project overview and development milestones.
+After reviewing this file, IMMEDIATELY read the `/docs/START_HERE.md` document to understand the project goals, structure, and current development status. Then review `/docs/development-guide.md` for detailed implementation status and next steps.
+
+## CRITICAL TESTING RULE
+ALL TESTS MUST PASS BEFORE COMMITTING CODE TO THE REPOSITORY.
+
+You MUST test in small increments rather than making large batches of changes. Run tests frequently during development to catch issues early. Follow a test-driven approach where possible.
 
 ## Build Commands
 - Build: `npm run build:all` - Builds both frontend and backend
+- Dev: `npm run dev` - Start both frontend and backend dev servers
+- Format: `npm run format` - Run Prettier on all files
 - Lint: `npm run lint` - Run ESLint on all JS/TS/Svelte files
 - Test (all): `npm test` - Run all unit tests with Vitest
+- Test (watch): `npm run test:watch` - Run tests in watch mode
 - Test (single): `npm test -- -t "test name"` - Run a specific test
 - Test (e2e): `npm run test:e2e` - Run end-to-end tests with Playwright
-- Dev mode: `npm run dev` - Start both frontend and backend dev servers
 
 ## Code Style Guidelines
 - **Formatting**: Use 2-space indentation, consistent line breaks
