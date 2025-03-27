@@ -39,11 +39,11 @@ This sandbox implements a lightweight application with:
 
 ### Milestone 3: Frontend Implementation
 
-- [ ] Create ConfigPage component
-- [ ] Create AdminDashboard component
-- [ ] Create EndUserSimulator component
-- [ ] Implement supporting UI components
-- [ ] Connect frontend to Express API
+- [x] Create ConfigPage component
+- [x] Create AdminDashboard component
+- [x] Create EndUserSimulator component
+- [x] Implement supporting UI components
+- [x] Connect frontend to Express API
 
 ### Milestone 4: Testing & Refinement
 

@@ -15,6 +15,7 @@ A development sandbox application built with Svelte (frontend) and Express (back
 
 - Node.js (v18 or higher)
 - npm (v7 or higher)
+- Conga Sign API credentials (client ID, client secret, and platform email)
 
 ### Installation
 
@@ -24,6 +25,20 @@ A development sandbox application built with Svelte (frontend) and Express (back
 ```bash
 npm install
 ```
+
+### Configuration
+
+1. Start the application (see Development section below)
+2. Navigate to the Config page
+3. Enter your Conga Sign API credentials:
+   - Region: Select your Conga Sign region (US, EU, or AU)
+   - Client ID: Your Conga Sign client ID
+   - Client Secret: Your Conga Sign client secret
+   - Platform Email: The email address of your Conga Sign user
+   - Callback URL (optional): URL for webhook notifications
+4. Click "Save Configuration" to save your credentials
+5. Click "Generate Token" to authenticate with the Conga Sign API
+6. Click "Test Config" to verify your credentials work correctly
 
 ### Development
 
@@ -38,6 +53,12 @@ This will start:
 - Express backend on http://localhost:3000
 
 The frontend is configured to proxy API requests to the backend automatically.
+
+### Features
+
+- **Configuration Page**: Setup and manage your Conga Sign API credentials
+- **Admin Dashboard**: View, resend, and cancel eSignature transactions
+- **End User Simulator**: Generate signing URLs and simulate the recipient experience
 
 ### Testing
 

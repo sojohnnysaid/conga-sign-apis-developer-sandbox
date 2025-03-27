@@ -1,28 +1,26 @@
 <script>
   // Configuration page component
-  let environment = 'Preview US';
+  let region = 'us';
   let clientId = '';
   let clientSecret = '';
-  let userEmail = '';
+  let platformEmail = '';
+  let callbackUrl = '';
   let loading = false;
   let message = '';
   let tokenStatus = 'none'; // 'none', 'valid', 'invalid'
 
-  // Environment options
-  const environments = [
-    'Preview US',
-    'Preview EU',
-    'Preview AU',
-    'Production US',
-    'Production EU',
-    'Production AU'
+  // Region options with display names
+  const regions = [
+    { value: 'us', display: 'US Region' },
+    { value: 'eu', display: 'EU Region' },
+    { value: 'au', display: 'AU Region' }
   ];
 
   // API endpoints
   const API_URL = '/api';
 
   // Load current configuration on component mount
-  async function loadConfig() {
+  export async function loadConfig() {
     try {
       const response = await fetch(`${API_URL}/config`);
       
@@ -30,16 +28,18 @@
         throw new Error(`Failed to load config: ${response.statusText}`);
       }
       
-      const config = await response.json();
+      const data = await response.json();
+      const config = data.config || {};
       
       // Update form fields with existing config
-      environment = config.environment || 'Preview US';
+      region = config.region || 'us';
       clientId = config.clientId || '';
-      userEmail = config.userEmail || '';
+      platformEmail = config.platformEmail || '';
+      callbackUrl = config.callbackUrl || '';
       // Don't populate clientSecret for security
       
       // Check token status
-      tokenStatus = config.accessToken ? 'valid' : 'none';
+      tokenStatus = config.accessToken ? 'valid' : (data.initialized ? 'invalid' : 'none');
     } catch (error) {
       console.error('Error loading config:', error);
       message = `Error: ${error.message}`;
@@ -53,15 +53,16 @@
       message = '';
       
       const response = await fetch(`${API_URL}/config`, {
-        method: 'POST',
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          environment,
+          region,
           clientId,
           clientSecret,
-          userEmail
+          platformEmail,
+          callbackUrl
         })
       });
       
@@ -70,7 +71,11 @@
       }
       
       const result = await response.json();
-      message = 'Configuration saved successfully';
+      if (result.success) {
+        message = 'Configuration saved successfully';
+      } else {
+        throw new Error(result.error || 'Unknown error occurred');
+      }
     } catch (error) {
       console.error('Error saving config:', error);
       message = `Error: ${error.message}`;
@@ -89,7 +94,7 @@
       await saveConfig();
       
       // Then request token generation
-      const response = await fetch(`${API_URL}/auth`, {
+      const response = await fetch(`${API_URL}/auth/token`, {
         method: 'POST'
       });
       
@@ -98,12 +103,42 @@
       }
       
       const result = await response.json();
-      message = 'Authentication token generated successfully';
-      tokenStatus = 'valid';
+      
+      if (result.success) {
+        message = 'Authentication token generated successfully';
+        tokenStatus = 'valid';
+      } else {
+        throw new Error(result.error || 'Failed to generate token');
+      }
     } catch (error) {
       console.error('Error generating token:', error);
       message = `Error: ${error.message}`;
       tokenStatus = 'invalid';
+    } finally {
+      loading = false;
+    }
+  }
+  
+  // Test API configuration
+  async function testConfig() {
+    try {
+      loading = true;
+      message = '';
+      
+      const response = await fetch(`${API_URL}/config/test`, {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        message = 'API configuration test successful';
+      } else {
+        throw new Error(result.error || 'API configuration test failed');
+      }
+    } catch (error) {
+      console.error('Error testing configuration:', error);
+      message = `Error: ${error.message}`;
     } finally {
       loading = false;
     }
@@ -122,10 +157,10 @@
   
   <form on:submit|preventDefault={saveConfig}>
     <div class="form-group">
-      <label for="environment">Environment:</label>
-      <select id="environment" bind:value={environment}>
-        {#each environments as env}
-          <option value={env}>{env}</option>
+      <label for="region">Region:</label>
+      <select id="region" bind:value={region}>
+        {#each regions as reg}
+          <option value={reg.value}>{reg.display}</option>
         {/each}
       </select>
     </div>
@@ -154,15 +189,26 @@
     </div>
     
     <div class="form-group">
-      <label for="userEmail">User Email:</label>
+      <label for="platformEmail">Platform Email:</label>
       <input 
         type="email" 
-        id="userEmail" 
-        bind:value={userEmail} 
-        placeholder="Enter user email"
+        id="platformEmail" 
+        bind:value={platformEmail} 
+        placeholder="Enter platform email"
         required
       />
       <small>This is the email of the Conga Sign user on whose behalf API calls are made</small>
+    </div>
+    
+    <div class="form-group">
+      <label for="callbackUrl">Callback URL (Optional):</label>
+      <input 
+        type="url" 
+        id="callbackUrl" 
+        bind:value={callbackUrl} 
+        placeholder="Enter callback URL for webhooks"
+      />
+      <small>URL for receiving webhook notifications from Conga Sign</small>
     </div>
     
     <div class="button-group">
@@ -170,9 +216,16 @@
       <button 
         type="button" 
         on:click={generateToken} 
-        disabled={loading || !clientId || !clientSecret || !userEmail}
+        disabled={loading || !clientId || !clientSecret || !platformEmail}
       >
         Generate Token
+      </button>
+      <button
+        type="button"
+        on:click={testConfig}
+        disabled={loading || !clientId || !clientSecret || !platformEmail}
+      >
+        Test Config
       </button>
     </div>
   </form>
@@ -226,7 +279,8 @@
   
   .button-group {
     display: flex;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
     margin-top: 1.5rem;
   }
   
@@ -238,6 +292,7 @@
     border-radius: 4px;
     cursor: pointer;
     flex: 1;
+    min-width: 150px;
   }
   
   button:hover:not(:disabled) {

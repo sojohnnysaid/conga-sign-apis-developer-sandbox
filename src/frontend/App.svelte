@@ -1,9 +1,8 @@
 <script>
   // Import pages
   import ConfigPage from './pages/ConfigPage.svelte';
-  // Import additional pages as they are developed
-  // import AdminDashboard from './pages/AdminDashboard.svelte';
-  // import EndUserSimulator from './pages/EndUserSimulator.svelte';
+  import AdminDashboard from './pages/AdminDashboard.svelte';
+  import EndUserSimulator from './pages/EndUserSimulator.svelte';
   
   // Simple routing
   let currentPage = 'home';
@@ -42,11 +41,9 @@
     {:else if currentPage === 'config'}
       <ConfigPage />
     {:else if currentPage === 'admin'}
-      <p>Admin Dashboard (to be implemented)</p>
-      <!-- <AdminDashboard /> -->
+      <AdminDashboard />
     {:else if currentPage === 'user'}
-      <p>End User Simulator (to be implemented)</p>
-      <!-- <EndUserSimulator /> -->
+      <EndUserSimulator />
     {/if}
   </div>
 </main>
