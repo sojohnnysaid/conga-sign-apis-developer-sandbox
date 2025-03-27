@@ -1,6 +1,6 @@
 {
   "name": "conga-sign-apis-developer-sandbox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A development sandbox for testing Conga Sign APIs with Svelte and Express",
   "type": "module",
   "scripts": {
