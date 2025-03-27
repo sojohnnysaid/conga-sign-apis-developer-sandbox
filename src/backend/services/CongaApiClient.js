@@ -304,13 +304,35 @@ class CongaApiClient {
       throw new Error('Platform email not configured');
     }
     
+    // Make sure email is properly URL encoded
     const ownerEmail = encodeURIComponent(options.ownerEmail || config.platformEmail);
     const from = options.from || 1;
     const to = options.to || 100;
     
-    return this.request(`/cs-packages?ownerEmail=${ownerEmail}&from=${from}&to=${to}`, {
-      method: 'GET'
-    });
+    // Construct the URL with required parameters
+    const url = `/cs-packages?ownerEmail=${ownerEmail}&from=${from}&to=${to}`;
+    
+    console.log(`Sending request to: ${url}`);
+    
+    try {
+      const response = await this.request(url, {
+        method: 'GET'
+      });
+      
+      // Log information about the shape of the response
+      if (response.packages) {
+        console.log(`Got API response for packages: ${response.packages.length} packages found`);
+      } else if (response.results) {
+        console.log(`Got API response for packages: ${response.results.length} results found`);
+      } else {
+        console.log('No packages or results array in response');
+      }
+      
+      return response;
+    } catch (error) {
+      console.error(`Error listing packages:`, error);
+      throw error;
+    }
   }
 
   /**

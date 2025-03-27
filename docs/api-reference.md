@@ -197,7 +197,20 @@ Revokes the current authentication token.
 GET /api/transactions
 ```
 
-Returns a list of all transactions.
+Returns a list of all transactions. You can optionally refresh the list from the Conga Sign API and provide pagination parameters.
+
+**Query Parameters:**
+- `refresh=true|false` - Whether to refresh the list from the Conga Sign API (default: false)
+- `from=N` - Starting index for pagination when retrieving from the API (default: 1)
+- `to=N` - Ending index for pagination when retrieving from the API (default: 100)
+- `ownerEmail=email` - Owner email to filter packages by (default: platform email from configuration)
+
+**Important Note:** When specifying the `ownerEmail` parameter, the email address will be automatically URL-encoded when sent to the Conga Sign API. This is critical since the API requires URL-encoded email addresses in the query parameters.
+
+**Example Request:**
+```
+GET /api/transactions?refresh=true&from=1&to=25&ownerEmail=user@example.com
+```
 
 **Example Response:**
 ```json

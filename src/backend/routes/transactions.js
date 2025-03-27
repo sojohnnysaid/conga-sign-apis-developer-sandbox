@@ -17,15 +17,35 @@ const upload = multer({
 /**
  * GET /api/transactions
  * Get all transactions, optionally refreshed from API
+ * 
+ * Query parameters:
+ * - refresh=true|false - Whether to refresh from API
+ * - from=N - Starting index for pagination (default: 1)
+ * - to=N - Ending index for pagination (default: 100)
+ * - ownerEmail=email - Owner email to filter packages (default: platform email from config)
  */
 router.get('/', async (req, res) => {
   try {
-    const refresh = req.query.refresh === 'true';
-    const transactions = await transactionManager.getAllTransactions(refresh);
+    const { refresh, from, to, ownerEmail } = req.query;
+    
+    // Filter out undefined values
+    const options = {
+      ...(from && { from: parseInt(from, 10) }),
+      ...(to && { to: parseInt(to, 10) }),
+      ...(ownerEmail && { ownerEmail })
+    };
+    
+    console.log('Transaction list request with options:', options, 'refresh:', refresh === 'true');
+    
+    const transactions = await transactionManager.getAllTransactions(
+      refresh === 'true',
+      options
+    );
+    
     res.json({ transactions });
   } catch (error) {
     console.error('Error fetching transactions:', error);
-    res.status(500).json({ error: 'Failed to fetch transactions' });
+    res.status(500).json({ error: 'Failed to fetch transactions', details: error.message });
   }
 });
 

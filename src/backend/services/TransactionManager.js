@@ -23,7 +23,15 @@ const TRANSACTIONS_FILE_PATH = path.join(dataDir, 'transactions.json');
 class TransactionManager {
   constructor() {
     this.apiClient = new CongaApiClient();
-    this.transactions = this.loadTransactions();
+    // Initialize with empty array as fallback
+    this.transactions = [];
+    // Load from storage
+    try {
+      this.transactions = this.loadTransactions();
+    } catch (error) {
+      console.error('Error initializing transactions:', error);
+      // Keep the empty array if loading fails
+    }
   }
 
   /**
@@ -34,7 +42,9 @@ class TransactionManager {
     try {
       if (fs.existsSync(TRANSACTIONS_FILE_PATH)) {
         const data = fs.readFileSync(TRANSACTIONS_FILE_PATH, 'utf8');
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        // Make sure we return an array, even if data is corrupted
+        return Array.isArray(parsed) ? parsed : [];
       } else {
         // Initialize with empty array if file doesn't exist
         this.saveTransactions([]);
@@ -69,17 +79,43 @@ class TransactionManager {
   /**
    * Get all transactions
    * @param {boolean} refresh - Whether to refresh from API
+   * @param {Object} options - Additional options for fetching transactions
    * @returns {Promise<Array>} All transactions
    */
-  async getAllTransactions(refresh = false) {
+  async getAllTransactions(refresh = false, options = {}) {
+    // Initialize transactions if undefined
+    if (!this.transactions) {
+      this.transactions = [];
+    }
+    
     if (refresh) {
       try {
-        const apiResponse = await this.apiClient.listPackages();
+        // Make sure we're passing the proper options with URL-encoded email
+        const listOptions = {
+          from: options.from || 1,
+          to: options.to || 100,
+          // Email will be URL-encoded in the CongaApiClient.listPackages method
+          ownerEmail: options.ownerEmail // If not provided, will use the platform email from config
+        };
         
+        console.log('Fetching transactions with options:', listOptions);
+        const apiResponse = await this.apiClient.listPackages(listOptions);
+        
+        // Handle different response formats - the API could return packages or results array
+        let packagesData = null;
         if (apiResponse && Array.isArray(apiResponse.packages)) {
-          // Update local records with API data
-          this.updateTransactionsFromApi(apiResponse.packages);
+          packagesData = apiResponse.packages;
+          console.log(`Found ${packagesData.length} packages from API (packages array)`);
+        } else if (apiResponse && Array.isArray(apiResponse.results)) {
+          packagesData = apiResponse.results;
+          console.log(`Found ${packagesData.length} packages from API (results array)`);
+        } else {
+          console.warn('API response did not contain packages or results array:', apiResponse);
+          return [...this.transactions]; // Early return with current data
         }
+        
+        // Update local records with API data
+        this.updateTransactionsFromApi(packagesData);
       } catch (error) {
         console.error('Error refreshing transactions from API:', error);
         // Continue with local data on error
@@ -94,33 +130,55 @@ class TransactionManager {
    * @param {Array} apiPackages - Packages from API
    */
   updateTransactionsFromApi(apiPackages) {
-    const updatedTransactions = [...this.transactions];
+    // Safety check
+    if (!Array.isArray(apiPackages)) {
+      console.error('updateTransactionsFromApi received non-array data:', apiPackages);
+      return false;
+    }
+    
+    // Make sure we have an array to work with
+    const updatedTransactions = Array.isArray(this.transactions) ? [...this.transactions] : [];
     
     apiPackages.forEach(apiPackage => {
+      // Log the structure of the first package to help debug
+      if (apiPackages.indexOf(apiPackage) === 0) {
+        console.log('Processing API package with structure:', 
+          Object.keys(apiPackage).join(', '));
+      }
+      
       const existingIndex = updatedTransactions.findIndex(t => t.id === apiPackage.id);
       
       if (existingIndex >= 0) {
         // Update existing transaction
         updatedTransactions[existingIndex] = {
           ...updatedTransactions[existingIndex],
-          status: apiPackage.status,
+          status: apiPackage.status || apiPackage.typeAsString || 'UNKNOWN',
           updated: new Date().toISOString(),
           apiData: apiPackage
         };
       } else {
         // Add new transaction if we don't have it locally
+        const signers = [];
+        
+        // Handle roles/signers data which might be in different formats
+        if (apiPackage.roles && Array.isArray(apiPackage.roles)) {
+          apiPackage.roles.forEach(role => {
+            signers.push({
+              id: role.id || role.uid || `role-${Math.random().toString(36).substring(2, 9)}`,
+              name: role.name || `${role.firstName || ''} ${role.lastName || ''}`.trim() || 'Unknown',
+              email: role.email || 'unknown@example.com',
+              status: role.status || 'PENDING'
+            });
+          });
+        }
+        
         updatedTransactions.push({
           id: apiPackage.id,
-          name: apiPackage.name,
+          name: apiPackage.name || 'Unnamed Package',
           created: new Date().toISOString(),
           updated: new Date().toISOString(),
-          status: apiPackage.status,
-          signers: apiPackage.roles ? apiPackage.roles.map(role => ({
-            id: role.id,
-            name: role.name,
-            email: role.email,
-            status: role.status || 'PENDING'
-          })) : [],
+          status: apiPackage.status || apiPackage.typeAsString || 'UNKNOWN',
+          signers: signers,
           documents: [],
           apiData: apiPackage,
           history: [
@@ -135,7 +193,13 @@ class TransactionManager {
     });
     
     // Save updated transactions
-    this.saveTransactions(updatedTransactions);
+    try {
+      this.saveTransactions(updatedTransactions);
+      return true;
+    } catch (error) {
+      console.error('Error saving updated transactions:', error);
+      return false;
+    }
   }
 
   /**
