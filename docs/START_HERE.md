@@ -7,7 +7,7 @@ Welcome to the Conga Sign APIs Developer Sandbox! This project creates a test-dr
 ## Quick Navigation
 
 - [Development Guide](./development-guide.md) - Comprehensive blueprint for the application architecture
-- [API Reference](./api-reference.md) - Documentation of the Express API endpoints (TODO)
+- [API Reference](./api-reference.md) - Documentation of the Express API endpoints
 - [Component Reference](./component-reference.md) - Documentation of Svelte components (TODO)
 - [Testing Guide](./testing-guide.md) - Guide to the test suite (TODO)
 
@@ -47,14 +47,49 @@ This sandbox implements a lightweight application with:
 
 ### Milestone 4: Testing & Refinement
 
-- [ ] Write E2E tests for main user flows
-- [ ] Implement reset functionality
-- [ ] Create sample data for demonstrations
-- [ ] Document API usage with examples
+- [x] Write E2E tests for main user flows
+- [x] Implement reset functionality
+- [x] Create sample data for demonstrations
+- [x] Document API usage with examples
 
 ## Getting Started
 
-*Instructions for setting up and running the project will be added once initial implementation is complete.*
+### Prerequisites
+
+- Node.js (v18 or higher)
+- npm (v7 or higher)
+- Conga Sign API credentials (client ID, client secret, and platform email)
+
+### Quick Start
+
+1. Clone the repository
+2. Install dependencies:
+   ```
+   npm install
+   ```
+3. Start the development server:
+   ```
+   npm run dev
+   ```
+4. Open your browser to http://localhost:5173
+5. Navigate to the Configuration page to set up your Conga Sign API credentials
+6. Use the Admin Dashboard to view and manage transactions
+7. Use the End User Simulator to generate signing URLs and simulate the recipient experience
+8. Use the System Utilities page to reset the application or generate sample data
+
+### Testing
+
+Run the test suite:
+```
+npm test
+```
+
+Run end-to-end tests:
+```
+npm run test:e2e
+```
+
+For more detailed instructions, see the [README.md](../README.md) file.
 
 ## Resources
 

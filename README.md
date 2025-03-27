@@ -122,6 +122,28 @@ See the `docs` folder for more detailed documentation:
 
 - [Start Here](./docs/START_HERE.md) - Introduction and navigation
 - [Development Guide](./docs/development-guide.md) - Comprehensive blueprint
+- [API Reference](./docs/api-reference.md) - Documentation of the Express API endpoints
+
+## Utility Features
+
+### Reset Application
+
+To quickly reset the application to a clean state:
+
+1. Navigate to the System Utilities page by clicking "System" in the navigation bar
+2. Choose whether to keep your environment settings
+3. Click "Reset Application Data"
+
+This will clear all configuration and transaction data, allowing you to start fresh.
+
+### Sample Data Generation
+
+To quickly populate the application with sample transactions for testing:
+
+1. Navigate to the System Utilities page
+2. Click "Create Sample Data"
+
+This will create several sample transactions with different statuses and configurations for demonstration purposes.
 
 ## License
 

@@ -21,10 +21,12 @@
   - All components connected to their respective backend APIs
   - Unit tests passing for all components
 
-- **Milestone 4 (Testing & Refinement)**: 🔄 IN PROGRESS
-  - Basic test suite implemented with Vitest and Testing Library
-  - More comprehensive test coverage needed for edge cases
-  - E2E tests still need to be implemented
+- **Milestone 4 (Testing & Refinement)**: ✅ COMPLETED
+  - Implemented E2E tests for all major user flows using Playwright
+  - Added reset functionality through both API and UI
+  - Created sample data generation for demonstrations
+  - Documented API usage with examples in api-reference.md
+  - Added System Utilities page for application management
 
 ## Overview
 
@@ -155,24 +157,27 @@ The application supports three regional environments:
    - Auth URL: `https://login-preview.congacloud.au`
    - Coreapps URL: `https://coreapps-preview.congacloud.au`
 
-### Next Development Steps
+### Future Development Opportunities
 
-1. Extend happy path test coverage:
-   - Add simple tests for ConfigManager main functionality
-   - Create tests for essential CongaApiClient API interactions
-   - Add tests for primary TransactionManager workflows
-   - Remember to focus only on happy paths, not error cases
-   
-2. Implement E2E tests for key user flows:
-   - Configuration and authentication flow
-   - Transaction creation and management flow
-   - Signature URL generation and recipient simulation
-   
-3. Create sample data for demonstration purposes:
-   - Provide sample documents for testing
-   - Create demo transactions with sample signers
-   
-4. Implement reset functionality to easily clear application state:
-   - Add UI control to reset configuration
-   - Add UI control to reset transactions
-   - Add comprehensive data reset capability
+With all planned milestones completed, here are some potential areas for future enhancement:
+
+1. Advanced Testing:
+   - Add performance testing for API calls
+   - Implement more complex E2E scenarios with multiple signers
+   - Add visual regression testing for UI components
+
+2. Feature Enhancements:
+   - Implement document upload functionality
+   - Add template support for creating transactions
+   - Create a more realistic signing simulation with embedded iframe
+   - Implement WebSocket notifications for real-time updates
+
+3. Developer Experience:
+   - Create a guided tour or tutorial mode
+   - Add detailed logging and debugging tools
+   - Implement a command-line interface for automated testing
+
+4. Documentation:
+   - Complete the Component Reference documentation
+   - Create a comprehensive Testing Guide
+   - Add video demonstrations of key workflows

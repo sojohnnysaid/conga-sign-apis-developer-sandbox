@@ -3,6 +3,7 @@
   import ConfigPage from './pages/ConfigPage.svelte';
   import AdminDashboard from './pages/AdminDashboard.svelte';
   import EndUserSimulator from './pages/EndUserSimulator.svelte';
+  import SystemUtilsPage from './pages/SystemUtilsPage.svelte';
   
   // Simple routing
   let currentPage = 'home';
@@ -20,6 +21,7 @@
       <button on:click={() => navigate('config')}>Config</button>
       <button on:click={() => navigate('admin')}>Admin Dashboard</button>
       <button on:click={() => navigate('user')}>End User Simulator</button>
+      <button on:click={() => navigate('system')}>System</button>
     </nav>
   </header>
 
@@ -36,6 +38,7 @@
           <button on:click={() => navigate('config')}>Configure API Credentials</button>
           <button on:click={() => navigate('admin')}>Admin Dashboard</button>
           <button on:click={() => navigate('user')}>Simulate End User</button>
+          <button on:click={() => navigate('system')}>System Utilities</button>
         </div>
       </div>
     {:else if currentPage === 'config'}
@@ -44,6 +47,8 @@
       <AdminDashboard />
     {:else if currentPage === 'user'}
       <EndUserSimulator />
+    {:else if currentPage === 'system'}
+      <SystemUtilsPage />
     {/if}
   </div>
 </main>

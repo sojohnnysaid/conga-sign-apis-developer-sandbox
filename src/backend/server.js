@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import configRoutes from './routes/config.js';
 import authRoutes from './routes/auth.js';
 import transactionRoutes from './routes/transactions.js';
+import sampleDataRoutes from './routes/sample-data.js';
 
 // Setup __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +24,7 @@ app.use(express.json());
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/sample-data', sampleDataRoutes);
 
 // Basic route for testing server health
 app.get('/api/health', (req, res) => {
