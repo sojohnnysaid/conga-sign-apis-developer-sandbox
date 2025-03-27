@@ -1,0 +1,63 @@
+# Conga Sign APIs Developer Sandbox - Start Here
+
+## Introduction
+
+Welcome to the Conga Sign APIs Developer Sandbox! This project creates a test-driven development environment for learning and experimenting with Conga Sign's eSignature APIs. The sandbox demonstrates how to integrate eSignature flows into your custom applications using Conga Sign APIs.
+
+## Quick Navigation
+
+- [Development Guide](./development-guide.md) - Comprehensive blueprint for the application architecture
+- [API Reference](./api-reference.md) - Documentation of the Express API endpoints (TODO)
+- [Component Reference](./component-reference.md) - Documentation of Svelte components (TODO)
+- [Testing Guide](./testing-guide.md) - Guide to the test suite (TODO)
+
+## Project Overview
+
+This sandbox implements a lightweight application with:
+
+1. **Configuration UI** - Setup Conga Sign API credentials and environment
+2. **Admin Dashboard** - View, resend, and cancel signature transactions
+3. **End-User Simulator** - Simulate the recipient's signing experience
+
+## Development Checklist
+
+### Milestone 1: Project Setup & Documentation
+
+- [x] Create project documentation structure
+- [x] Setup basic .gitignore file
+- [ ] Initialize package.json with dependencies
+- [ ] Setup basic folder structure for Svelte and Express
+- [ ] Create configuration files (tsconfig.json, vite.config.js, etc.)
+
+### Milestone 2: Backend Implementation
+
+- [ ] Implement ConfigManager class
+- [ ] Implement CongaApiClient class
+- [ ] Implement TransactionManager class
+- [ ] Create Express API routes
+- [ ] Write unit tests for backend classes
+
+### Milestone 3: Frontend Implementation
+
+- [ ] Create ConfigPage component
+- [ ] Create AdminDashboard component
+- [ ] Create EndUserSimulator component
+- [ ] Implement supporting UI components
+- [ ] Connect frontend to Express API
+
+### Milestone 4: Testing & Refinement
+
+- [ ] Write E2E tests for main user flows
+- [ ] Implement reset functionality
+- [ ] Create sample data for demonstrations
+- [ ] Document API usage with examples
+
+## Getting Started
+
+*Instructions for setting up and running the project will be added once initial implementation is complete.*
+
+## Resources
+
+- [Conga Sign API Documentation](https://documentation.conga.com/sign/)
+- [Svelte Documentation](https://svelte.dev/docs)
+- [Express Documentation](https://expressjs.com/)
