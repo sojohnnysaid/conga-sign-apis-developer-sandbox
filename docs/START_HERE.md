@@ -25,9 +25,9 @@ This sandbox implements a lightweight application with:
 
 - [x] Create project documentation structure
 - [x] Setup basic .gitignore file
-- [ ] Initialize package.json with dependencies
-- [ ] Setup basic folder structure for Svelte and Express
-- [ ] Create configuration files (tsconfig.json, vite.config.js, etc.)
+- [x] Initialize package.json with dependencies
+- [x] Setup basic folder structure for Svelte and Express
+- [x] Create configuration files (tsconfig.json, vite.config.js, etc.)
 
 ### Milestone 2: Backend Implementation
 
