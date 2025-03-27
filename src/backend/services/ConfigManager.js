@@ -6,15 +6,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Make sure data directory exists
-const dataDir = path.join(__dirname, '..', '..', '..', 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-// Path to the config file
-const CONFIG_FILE_PATH = path.join(dataDir, 'config.json');
-
 // Region URL mapping
 const REGIONS = {
   'us': { 
@@ -48,7 +39,24 @@ const DEFAULT_CONFIG = {
 
 class ConfigManager {
   constructor() {
+    // Set up file paths
+    this.dataDir = path.join(__dirname, '..', '..', '..', 'data');
+    this.configFilePath = path.join(this.dataDir, 'config.json');
+    
+    // Ensure data directory exists
+    this.ensureDataDirectoryExists();
+    
+    // Load configuration
     this.config = this.loadConfig();
+  }
+  
+  /**
+   * Ensure the data directory exists
+   */
+  ensureDataDirectoryExists() {
+    if (!fs.existsSync(this.dataDir)) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
+    }
   }
 
   /**
@@ -58,8 +66,8 @@ class ConfigManager {
   loadConfig() {
     try {
       // Check if file exists
-      if (fs.existsSync(CONFIG_FILE_PATH)) {
-        const configData = fs.readFileSync(CONFIG_FILE_PATH, 'utf8');
+      if (fs.existsSync(this.configFilePath)) {
+        const configData = fs.readFileSync(this.configFilePath, 'utf8');
         return JSON.parse(configData);
       } else {
         // If file doesn't exist, create it with default config
@@ -79,8 +87,11 @@ class ConfigManager {
    */
   saveConfig(config) {
     try {
+      // Ensure directory exists
+      this.ensureDataDirectoryExists();
+      
       fs.writeFileSync(
-        CONFIG_FILE_PATH, 
+        this.configFilePath, 
         JSON.stringify(config, null, 2), 
         'utf8'
       );
