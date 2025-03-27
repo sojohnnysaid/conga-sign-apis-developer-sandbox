@@ -31,11 +31,11 @@ This sandbox implements a lightweight application with:
 
 ### Milestone 2: Backend Implementation
 
-- [ ] Implement ConfigManager class
-- [ ] Implement CongaApiClient class
-- [ ] Implement TransactionManager class
-- [ ] Create Express API routes
-- [ ] Write unit tests for backend classes
+- [x] Implement ConfigManager class
+- [x] Implement CongaApiClient class
+- [x] Implement TransactionManager class
+- [x] Create Express API routes
+- [x] Write unit tests for backend classes
 
 ### Milestone 3: Frontend Implementation
 

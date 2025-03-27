@@ -1,163 +1,413 @@
 import fetch from 'node-fetch';
 import ConfigManager from './ConfigManager.js';
 
+/**
+ * CongaApiClient
+ * Handles API interactions with Conga Sign
+ */
 class CongaApiClient {
   constructor() {
     this.configManager = new ConfigManager();
   }
 
   /**
-   * Fetch authentication token from Conga API
-   * @param {string} clientId - Client ID
-   * @param {string} clientSecret - Client Secret
-   * @param {string} userEmail - User's email
-   * @param {string} environment - Selected environment
-   * @returns {Promise<string>} Authentication token
+   * Authenticate with Conga Sign API
+   * @returns {Promise<string>} Auth token
+   * @throws {Error} If authentication fails
    */
-  async fetchAuthToken(clientId, clientSecret, userEmail, environment) {
+  async authenticate() {
+    if (!this.configManager.isInitialized()) {
+      throw new Error('API client not configured. Please set client ID, client secret, and platform email.');
+    }
+
+    // Check if we already have a valid token
+    if (this.configManager.isTokenValid()) {
+      return this.configManager.getConfig(true).accessToken;
+    }
+
     try {
-      // Update config with the provided values
-      this.configManager.updateConfig({
-        clientId,
-        clientSecret,
-        userEmail,
-        environment
-      });
+      const config = this.configManager.getConfig(true);
+      const authUrl = this.configManager.getFullAuthUrl();
 
-      // Get the auth URL for the selected environment
-      const { authUrl } = this.configManager.getEnvironmentUrls();
-      const tokenEndpoint = `${authUrl}/api/sign/v1/cs-authenticationTokens/user`;
+      // Setup auth parameters
+      const params = new URLSearchParams();
+      params.append('grant_type', 'client_credentials');
+      params.append('client_id', config.clientId);
+      params.append('client_secret', config.clientSecret);
 
-      // Prepare the request headers with authentication
-      const authString = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-      
-      const response = await fetch(tokenEndpoint, {
+      // Make auth request
+      const response = await fetch(authUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Basic ${authString}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
-        body: JSON.stringify({ userEmail })
+        body: params
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Auth failed: ${response.status} ${errorData.message || response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Authentication failed (${response.status}): ${errorText}`);
       }
 
-      // Extract token from response (exact response format will depend on Conga's API)
-      // This is a placeholder - adjust based on actual Conga API response format
-      const responseData = await response.json();
-      const token = responseData.token || response.headers.get('Conga-Access-Token');
+      const data = await response.json();
+      
+      // Extract token from response
+      const token = data.token || data.access_token;
+      const expiresIn = data.expires_in || 3600; // Default 1 hour
       
       if (!token) {
         throw new Error('No token received from authentication service');
       }
 
-      // Save the token in config
-      // If the response includes an expiry, we would extract and save that too
-      const expiry = responseData.expiresAt || null;
-      this.configManager.updateToken(token, expiry);
-
+      // Store token in config
+      this.configManager.updateToken(token, expiresIn);
+      
       return token;
     } catch (error) {
       console.error('Authentication error:', error);
-      throw error;
+      throw new Error(`Failed to authenticate: ${error.message}`);
     }
   }
 
   /**
-   * Make an authenticated API call to Conga
+   * Make API request to Conga Sign API
    * @param {string} endpoint - API endpoint
-   * @param {string} method - HTTP method
-   * @param {Object} [body] - Request body
-   * @returns {Promise<Object>} Response data
+   * @param {Object} options - Request options
+   * @returns {Promise<Object>} API response
    */
-  async callApi(endpoint, method = 'GET', body = null) {
+  async request(endpoint, options = {}) {
     try {
-      // Get current configuration
-      const config = this.configManager.getConfig(true);
+      // Get auth token first
+      const token = await this.authenticate();
       
-      // Check if we have a valid token
-      if (!this.configManager.isTokenValid()) {
-        throw new Error('No valid authentication token. Please authenticate first.');
-      }
-
-      // Get the base URL for the selected environment
-      const { baseUrl } = this.configManager.getEnvironmentUrls();
-      const apiUrl = `${baseUrl}${endpoint}`;
-
-      // Prepare request options
+      // Build full URL and request options
+      const baseApiUrl = this.configManager.getFullApiUrl();
+      const url = `${baseApiUrl}${endpoint}`;
+      
       const requestOptions = {
-        method,
         headers: {
-          'Authorization': `Bearer ${config.accessToken}`,
-          'Accept': 'application/json'
-        }
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...options.headers
+        },
+        ...options
       };
 
-      // Add body if provided
-      if (body) {
-        requestOptions.headers['Content-Type'] = 'application/json';
-        requestOptions.body = JSON.stringify(body);
+      // For FormData, let the browser set the Content-Type
+      if (options.body instanceof FormData) {
+        delete requestOptions.headers['Content-Type'];
       }
 
-      // Make the API call
-      const response = await fetch(apiUrl, requestOptions);
-
+      // Make API request
+      const response = await fetch(url, requestOptions);
+      
+      // Handle different response types
+      if (response.status === 204) {
+        // No content
+        return { success: true };
+      }
+      
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`API call failed: ${response.status} ${errorData.message || response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`API request failed (${response.status}): ${errorText}`);
       }
 
-      // Parse the response
-      const data = await response.json();
-      return data;
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json();
+      } else {
+        // Handle non-JSON responses
+        return { 
+          success: true, 
+          text: await response.text(),
+          status: response.status
+        };
+      }
     } catch (error) {
-      console.error(`Error calling Conga API at ${endpoint}:`, error);
-      throw error;
+      console.error('API request error:', error);
+      throw new Error(`API request failed: ${error.message}`);
     }
   }
 
   /**
-   * Get a list of transactions
-   * @returns {Promise<Array>} List of transactions
+   * Set up callbacks for API events
+   * @param {Object} options - Callback options
+   * @returns {Promise<Object>} API response
    */
-  async getTransactions() {
-    // This endpoint will need to be adjusted based on Conga's actual API
-    const endpoint = '/api/sign/v1/cs-packages';
-    return this.callApi(endpoint);
+  async registerCallbacks(options = {}) {
+    const config = this.configManager.getConfig();
+    if (!config.callbackUrl) {
+      throw new Error('Callback URL not configured');
+    }
+
+    const events = options.events || [
+      'PACKAGE_CREATE',
+      'DOCUMENT_VIEWED',
+      'SIGNER_COMPLETE',
+      'DOCUMENT_SIGNED',
+      'PACKAGE_COMPLETE',
+      'PACKAGE_DECLINE',
+      'EMAIL_BOUNCE'
+    ];
+
+    const requestBody = {
+      events,
+      authType: options.authType || 'NO_AUTH',
+      url: config.callbackUrl
+    };
+
+    return this.request('/cs-callback', {
+      method: 'POST',
+      body: JSON.stringify(requestBody)
+    });
   }
 
   /**
-   * Resend a transaction invitation
-   * @param {string} packageId - Transaction/package ID
-   * @returns {Promise<Object>} Response data
+   * Create a new signing package
+   * @param {Object} packageData - Package details
+   * @returns {Promise<Object>} Created package
    */
-  async resendTransaction(packageId) {
-    const endpoint = `/api/sign/v1/cs-packages/${packageId}/resend`;
-    return this.callApi(endpoint, 'POST');
+  async createPackage(packageData = {}) {
+    const config = this.configManager.getConfig();
+    
+    // Create package data with defaults
+    const requestBody = {
+      name: packageData.name || 'Signature Package',
+      type: 'PACKAGE',
+      autocomplete: true,
+      sender: {
+        email: packageData.senderEmail || config.platformEmail
+      },
+      ...packageData
+    };
+
+    return this.request('/cs-packages', {
+      method: 'POST',
+      body: JSON.stringify(requestBody)
+    });
   }
 
   /**
-   * Cancel a transaction
-   * @param {string} packageId - Transaction/package ID
-   * @returns {Promise<Object>} Response data
+   * Add a signer role to a package
+   * @param {string} packageId - Package ID
+   * @param {Object} signerData - Signer details
+   * @returns {Promise<Object>} API response
    */
-  async cancelTransaction(packageId) {
-    const endpoint = `/api/sign/v1/cs-packages/${packageId}/cancel`;
-    return this.callApi(endpoint, 'POST');
+  async addSigner(packageId, signerData) {
+    // Create signer data with defaults
+    const signer = {
+      name: `${signerData.firstName} ${signerData.lastName}`,
+      company: signerData.company || '',
+      delivery: {
+        email: true
+      },
+      firstName: signerData.firstName,
+      lastName: signerData.lastName,
+      email: signerData.email,
+      signerType: 'EXTERNAL_SIGNER',
+      ...signerData
+    };
+
+    const requestBody = {
+      signers: [signer]
+    };
+
+    return this.request(`/cs-packages/${packageId}/roles`, {
+      method: 'POST',
+      body: JSON.stringify(requestBody)
+    });
   }
 
   /**
-   * Get details of a specific transaction
-   * @param {string} packageId - Transaction/package ID
-   * @returns {Promise<Object>} Transaction details
+   * Add a document to a package
+   * @param {string} packageId - Package ID
+   * @param {File|Blob|Object} file - Document file
+   * @returns {Promise<Object>} API response
    */
-  async getTransactionDetails(packageId) {
-    const endpoint = `/api/sign/v1/cs-packages/${packageId}`;
-    return this.callApi(endpoint);
+  async addDocument(packageId, file) {
+    const formData = new FormData();
+    
+    // Handle different file types
+    if (file instanceof Blob) {
+      formData.append('file', file, file.name || 'document.pdf');
+    } else if (file.buffer) {
+      // Handle Node.js Buffer from multer or similar
+      const blob = new Blob([file.buffer], { type: file.mimetype || 'application/pdf' });
+      formData.append('file', blob, file.originalname || file.name || 'document.pdf');
+    } else {
+      throw new Error('Invalid file format');
+    }
+
+    return this.request(`/cs-packages/${packageId}/documents`, {
+      method: 'POST',
+      body: formData
+    });
+  }
+
+  /**
+   * Add signature field to a document
+   * @param {string} packageId - Package ID
+   * @param {string} documentId - Document ID
+   * @param {string} roleId - Signer role ID
+   * @param {Object} fieldOptions - Field options
+   * @returns {Promise<Object>} API response
+   */
+  async addSignatureField(packageId, documentId, roleId, fieldOptions = {}) {
+    // Default field options
+    const field = {
+      type: 'SIGNATURE',
+      page: fieldOptions.page || 0,
+      left: fieldOptions.left || 100,
+      top: fieldOptions.top || 100,
+      width: fieldOptions.width || 200,
+      height: fieldOptions.height || 50,
+      ...fieldOptions
+    };
+
+    const requestBody = {
+      fields: [field],
+      role: roleId
+    };
+
+    return this.request(`/cs-packages/${packageId}/documents/${documentId}/approvals`, {
+      method: 'POST',
+      body: JSON.stringify(requestBody)
+    });
+  }
+
+  /**
+   * Send package for signing
+   * @param {string} packageId - Package ID
+   * @returns {Promise<Object>} API response
+   */
+  async sendPackage(packageId) {
+    const requestBody = {
+      status: 'SENT'
+    };
+
+    return this.request(`/cs-packages/${packageId}`, {
+      method: 'PUT',
+      body: JSON.stringify(requestBody)
+    });
+  }
+
+  /**
+   * List packages for current user
+   * @param {Object} options - List options
+   * @returns {Promise<Object>} API response
+   */
+  async listPackages(options = {}) {
+    const config = this.configManager.getConfig();
+    
+    if (!config.platformEmail) {
+      throw new Error('Platform email not configured');
+    }
+    
+    const ownerEmail = encodeURIComponent(options.ownerEmail || config.platformEmail);
+    const from = options.from || 1;
+    const to = options.to || 100;
+    
+    return this.request(`/cs-packages?ownerEmail=${ownerEmail}&from=${from}&to=${to}`, {
+      method: 'GET'
+    });
+  }
+
+  /**
+   * Get signing status of a package
+   * @param {string} packageId - Package ID
+   * @returns {Promise<Object>} API response
+   */
+  async getSigningStatus(packageId) {
+    return this.request(`/cs-packages/${packageId}/signingStatus`, {
+      method: 'GET'
+    });
+  }
+
+  /**
+   * Get audit report for a package
+   * @param {string} packageId - Package ID
+   * @returns {Promise<Object>} API response
+   */
+  async getAuditReport(packageId) {
+    return this.request(`/cs-packages/${packageId}/audit`, {
+      method: 'GET'
+    });
+  }
+
+  /**
+   * Resend notification to a signer
+   * @param {string} packageId - Package ID
+   * @param {Object} notificationData - Notification details
+   * @returns {Promise<Object>} API response
+   */
+  async resendNotification(packageId, notificationData) {
+    const requestBody = {
+      email: notificationData.email,
+      message: notificationData.message || 'Please sign the document'
+    };
+
+    return this.request(`/cs-packages/${packageId}/notifications`, {
+      method: 'POST',
+      body: JSON.stringify(requestBody)
+    });
+  }
+
+  /**
+   * Cancel (delete) a package
+   * @param {string} packageId - Package ID
+   * @returns {Promise<Object>} API response
+   */
+  async cancelPackage(packageId) {
+    return this.request(`/cs-packages/${packageId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  /**
+   * Get signing URL for a signer
+   * @param {string} packageId - Package ID
+   * @param {string} roleId - Role ID
+   * @returns {Promise<Object>} API response
+   */
+  async getSigningUrl(packageId, roleId) {
+    return this.request(`/cs-packages/${packageId}/roles/${roleId}/signingUrl`, {
+      method: 'GET'
+    });
+  }
+
+  /**
+   * Create a sender authentication token
+   * @param {string} packageId - Package ID
+   * @returns {Promise<Object>} API response
+   */
+  async createSenderToken(packageId) {
+    const requestBody = {
+      packageId
+    };
+
+    return this.request('/cs-authenticationTokens/sender', {
+      method: 'POST',
+      body: JSON.stringify(requestBody)
+    });
+  }
+
+  /**
+   * Create a signer authentication token
+   * @param {string} packageId - Package ID
+   * @param {string} signerId - Signer ID
+   * @returns {Promise<Object>} API response
+   */
+  async createSignerToken(packageId, signerId) {
+    const requestBody = {
+      packageId,
+      signerId
+    };
+
+    return this.request('/cs-authenticationTokens/signer/singleUse', {
+      method: 'POST',
+      body: JSON.stringify(requestBody)
+    });
   }
 }
 

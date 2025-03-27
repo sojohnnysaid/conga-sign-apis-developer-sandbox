@@ -6,45 +6,44 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Path to the config file
-const CONFIG_FILE_PATH = path.join(__dirname, '..', '..', '..', 'config.json');
+// Make sure data directory exists
+const dataDir = path.join(__dirname, '..', '..', '..', 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
 
-// Environment URL mapping
-const ENVIRONMENTS = {
-  'Preview US': { 
-    baseUrl: 'https://preview-rls09.congacloud.com', 
-    authUrl: 'https://login-rls09.congacloud.com' 
+// Path to the config file
+const CONFIG_FILE_PATH = path.join(dataDir, 'config.json');
+
+// Region URL mapping
+const REGIONS = {
+  'us': { 
+    baseUrl: 'https://preview-rls09.congacloud.com',
+    authUrl: 'https://login-rlspreview.congacloud.com',
+    coreappsUrl: 'https://coreapps-rlspreview.congacloud.com'
   },
-  'Preview EU': { 
-    baseUrl: 'https://preview-rls09.congacloud.eu', 
-    authUrl: 'https://login-rls09.congacloud.eu' 
+  'eu': { 
+    baseUrl: 'https://rls-preview.congacloud.eu',
+    authUrl: 'https://login-preview.congacloud.eu',
+    coreappsUrl: 'https://coreapps-preview.congacloud.eu'
   },
-  'Preview AU': { 
-    baseUrl: 'https://preview-rls09.congacloud.com.au', 
-    authUrl: 'https://login-rls09.congacloud.com.au' 
-  },
-  'Production US': { 
-    baseUrl: 'https://prod-rls.congacloud.com', 
-    authUrl: 'https://login.congacloud.com' 
-  },
-  'Production EU': { 
-    baseUrl: 'https://prod-rls.congacloud.eu', 
-    authUrl: 'https://login.congacloud.eu' 
-  },
-  'Production AU': { 
-    baseUrl: 'https://prod-rls.congacloud.com.au', 
-    authUrl: 'https://login.congacloud.com.au' 
+  'au': { 
+    baseUrl: 'https://rls-preview.congacloud.au',
+    authUrl: 'https://login-preview.congacloud.au',
+    coreappsUrl: 'https://coreapps-preview.congacloud.au'
   }
 };
 
 // Default config structure
 const DEFAULT_CONFIG = {
-  environment: 'Preview US',
+  region: 'us',
   clientId: '',
   clientSecret: '',
-  userEmail: '',
+  platformEmail: '',
+  callbackUrl: '',
   accessToken: null,
-  tokenExpiry: null
+  tokenExpiry: null,
+  initialized: false
 };
 
 class ConfigManager {
@@ -86,9 +85,10 @@ class ConfigManager {
         'utf8'
       );
       this.config = config;
+      return true;
     } catch (error) {
       console.error('Error saving config:', error);
-      throw new Error('Failed to save configuration');
+      return false;
     }
   }
 
@@ -107,41 +107,101 @@ class ConfigManager {
   }
 
   /**
+   * Get full auth URL including endpoint
+   * @returns {string} The complete auth URL
+   */
+  getFullAuthUrl() {
+    const { region } = this.config;
+    const urls = REGIONS[region] || REGIONS['us'];
+    return `${urls.authUrl}/api/v1/auth/connect/token`;
+  }
+
+  /**
+   * Get full API URL including endpoint
+   * @returns {string} The complete API URL
+   */
+  getFullApiUrl() {
+    const { region } = this.config;
+    const urls = REGIONS[region] || REGIONS['us'];
+    return `${urls.coreappsUrl}/api/sign/v1`;
+  }
+
+  /**
+   * Check if the API is configured with valid credentials
+   * @returns {boolean} Whether configuration is initialized
+   */
+  isInitialized() {
+    return this.config && this.config.initialized === true;
+  }
+
+  /**
    * Update configuration values
    * @param {Object} newConfig - New configuration values to merge
-   * @returns {Object} The updated configuration
+   * @returns {boolean} Success status
    */
   updateConfig(newConfig) {
-    const updatedConfig = { ...this.config, ...newConfig };
-    
-    // If client ID or secret changed, clear the token
-    if (
-      (newConfig.clientId && newConfig.clientId !== this.config.clientId) ||
-      (newConfig.clientSecret && newConfig.clientSecret !== this.config.clientSecret)
-    ) {
-      updatedConfig.accessToken = null;
-      updatedConfig.tokenExpiry = null;
+    try {
+      // Validate essential fields
+      if (newConfig.clientId && typeof newConfig.clientId !== 'string') {
+        throw new Error('Invalid client ID format');
+      }
+      
+      if (newConfig.clientSecret && typeof newConfig.clientSecret !== 'string') {
+        throw new Error('Invalid client secret format');
+      }
+
+      if (newConfig.platformEmail && typeof newConfig.platformEmail !== 'string') {
+        throw new Error('Invalid platform email format');
+      }
+
+      // Create updated config
+      const updatedConfig = { ...this.config, ...newConfig };
+      
+      // If client ID or secret changed, clear the token
+      if (
+        (newConfig.clientId && newConfig.clientId !== this.config.clientId) ||
+        (newConfig.clientSecret && newConfig.clientSecret !== this.config.clientSecret)
+      ) {
+        updatedConfig.accessToken = null;
+        updatedConfig.tokenExpiry = null;
+      }
+      
+      // Set initialized to true if all required fields are present
+      updatedConfig.initialized = Boolean(
+        updatedConfig.clientId && 
+        updatedConfig.clientSecret && 
+        updatedConfig.platformEmail
+      );
+      
+      return this.saveConfig(updatedConfig);
+    } catch (error) {
+      console.error('Error updating configuration:', error);
+      return false;
     }
-    
-    this.saveConfig(updatedConfig);
-    return this.getConfig();
   }
 
   /**
    * Update the auth token
    * @param {string} token - The authentication token
-   * @param {string|null} expiry - Token expiry timestamp (optional)
-   * @returns {Object} The updated configuration
+   * @param {number} expiresIn - Token expiry time in seconds
+   * @returns {boolean} Success status
    */
-  updateToken(token, expiry = null) {
-    const updatedConfig = { 
-      ...this.config, 
-      accessToken: token, 
-      tokenExpiry: expiry 
-    };
-    
-    this.saveConfig(updatedConfig);
-    return this.getConfig();
+  updateToken(token, expiresIn = 3600) {
+    try {
+      // Calculate expiry time (current time + expires_in - 5 min buffer)
+      const expiryTime = new Date(Date.now() + (expiresIn * 1000) - (5 * 60 * 1000));
+      
+      const updatedConfig = { 
+        ...this.config, 
+        accessToken: token, 
+        tokenExpiry: expiryTime.toISOString()
+      };
+      
+      return this.saveConfig(updatedConfig);
+    } catch (error) {
+      console.error('Error updating token:', error);
+      return false;
+    }
   }
 
   /**
@@ -160,33 +220,38 @@ class ConfigManager {
       return expiryDate > now;
     }
     
-    // If no expiry set, assume token is valid
-    return true;
+    // If no expiry set, assume token is not valid
+    return false;
   }
 
   /**
-   * Get base URL and auth URL for the selected environment
-   * @returns {Object} Object containing baseUrl and authUrl
+   * Get URL configuration for the selected region
+   * @returns {Object} Object containing baseUrl, authUrl, and coreappsUrl
    */
-  getEnvironmentUrls() {
-    const env = this.config.environment;
-    return ENVIRONMENTS[env] || ENVIRONMENTS['Preview US']; // Fallback to Preview US
+  getRegionUrls() {
+    const { region } = this.config;
+    return REGIONS[region] || REGIONS['us']; // Fallback to US
   }
 
   /**
    * Reset the configuration to defaults
-   * @param {boolean} keepEnvironment - Whether to keep the current environment setting
+   * @param {boolean} keepRegion - Whether to keep the current region setting
+   * @returns {boolean} Success status
    */
-  reset(keepEnvironment = true) {
-    const resetConfig = { ...DEFAULT_CONFIG };
-    
-    // Optionally keep the current environment setting
-    if (keepEnvironment && this.config.environment) {
-      resetConfig.environment = this.config.environment;
+  reset(keepRegion = true) {
+    try {
+      const resetConfig = { ...DEFAULT_CONFIG };
+      
+      // Optionally keep the current region setting
+      if (keepRegion && this.config.region) {
+        resetConfig.region = this.config.region;
+      }
+      
+      return this.saveConfig(resetConfig);
+    } catch (error) {
+      console.error('Error resetting configuration:', error);
+      return false;
     }
-    
-    this.saveConfig(resetConfig);
-    return this.getConfig();
   }
 }
 

@@ -7,9 +7,19 @@ import CongaApiClient from './CongaApiClient.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Path to the transactions file
-const TRANSACTIONS_FILE_PATH = path.join(__dirname, '..', '..', '..', 'transactions.json');
+// Make sure data directory exists
+const dataDir = path.join(__dirname, '..', '..', '..', 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
 
+// Path to the transactions storage file
+const TRANSACTIONS_FILE_PATH = path.join(dataDir, 'transactions.json');
+
+/**
+ * TransactionManager
+ * Manages signing transactions and their lifecycle
+ */
 class TransactionManager {
   constructor() {
     this.apiClient = new CongaApiClient();
@@ -17,211 +27,610 @@ class TransactionManager {
   }
 
   /**
-   * Load transactions from JSON file
-   * @returns {Array} The transactions array
+   * Load transactions from storage
+   * @returns {Array} Loaded transactions
    */
   loadTransactions() {
     try {
-      // Check if file exists
       if (fs.existsSync(TRANSACTIONS_FILE_PATH)) {
-        const transactionsData = fs.readFileSync(TRANSACTIONS_FILE_PATH, 'utf8');
-        return JSON.parse(transactionsData);
+        const data = fs.readFileSync(TRANSACTIONS_FILE_PATH, 'utf8');
+        return JSON.parse(data);
       } else {
-        // If file doesn't exist, create it with empty array
+        // Initialize with empty array if file doesn't exist
         this.saveTransactions([]);
         return [];
       }
     } catch (error) {
       console.error('Error loading transactions:', error);
-      // Return empty array if there's an error
       return [];
     }
   }
 
   /**
-   * Save transactions to JSON file
-   * @param {Array} transactions - Transactions array to save
+   * Save transactions to storage
+   * @param {Array} transactions - Transactions to save
+   * @returns {boolean} Success status
    */
   saveTransactions(transactions) {
     try {
       fs.writeFileSync(
-        TRANSACTIONS_FILE_PATH, 
-        JSON.stringify(transactions, null, 2), 
+        TRANSACTIONS_FILE_PATH,
+        JSON.stringify(transactions, null, 2),
         'utf8'
       );
       this.transactions = transactions;
+      return true;
     } catch (error) {
       console.error('Error saving transactions:', error);
-      throw new Error('Failed to save transactions');
+      return false;
     }
   }
 
   /**
    * Get all transactions
-   * @returns {Array} List of transactions
+   * @param {boolean} refresh - Whether to refresh from API
+   * @returns {Promise<Array>} All transactions
    */
-  getAllTransactions() {
+  async getAllTransactions(refresh = false) {
+    if (refresh) {
+      try {
+        const apiResponse = await this.apiClient.listPackages();
+        
+        if (apiResponse && Array.isArray(apiResponse.packages)) {
+          // Update local records with API data
+          this.updateTransactionsFromApi(apiResponse.packages);
+        }
+      } catch (error) {
+        console.error('Error refreshing transactions from API:', error);
+        // Continue with local data on error
+      }
+    }
+    
     return [...this.transactions];
   }
 
   /**
-   * Add or update a transaction
-   * @param {Object} transaction - Transaction object to add/update
-   * @returns {Array} Updated list of transactions
+   * Update local transaction records with data from API
+   * @param {Array} apiPackages - Packages from API
    */
-  updateTransaction(transaction) {
-    // Check if transaction already exists
-    const index = this.transactions.findIndex(t => t.id === transaction.id);
+  updateTransactionsFromApi(apiPackages) {
+    const updatedTransactions = [...this.transactions];
     
-    if (index !== -1) {
-      // Update existing transaction
-      this.transactions[index] = { ...this.transactions[index], ...transaction };
-    } else {
-      // Add new transaction
-      this.transactions.push(transaction);
-    }
+    apiPackages.forEach(apiPackage => {
+      const existingIndex = updatedTransactions.findIndex(t => t.id === apiPackage.id);
+      
+      if (existingIndex >= 0) {
+        // Update existing transaction
+        updatedTransactions[existingIndex] = {
+          ...updatedTransactions[existingIndex],
+          status: apiPackage.status,
+          updated: new Date().toISOString(),
+          apiData: apiPackage
+        };
+      } else {
+        // Add new transaction if we don't have it locally
+        updatedTransactions.push({
+          id: apiPackage.id,
+          name: apiPackage.name,
+          created: new Date().toISOString(),
+          updated: new Date().toISOString(),
+          status: apiPackage.status,
+          signers: apiPackage.roles ? apiPackage.roles.map(role => ({
+            id: role.id,
+            name: role.name,
+            email: role.email,
+            status: role.status || 'PENDING'
+          })) : [],
+          documents: [],
+          apiData: apiPackage,
+          history: [
+            {
+              action: 'DISCOVERED',
+              timestamp: new Date().toISOString(),
+              details: 'Transaction discovered from API'
+            }
+          ]
+        });
+      }
+    });
     
-    this.saveTransactions(this.transactions);
-    return this.getAllTransactions();
+    // Save updated transactions
+    this.saveTransactions(updatedTransactions);
   }
 
   /**
    * Get a transaction by ID
-   * @param {string} transactionId - Transaction ID
-   * @returns {Object|null} Transaction object or null if not found
+   * @param {string} id - Transaction ID
+   * @param {boolean} refresh - Whether to refresh from API
+   * @returns {Promise<Object|null>} The transaction or null if not found
    */
-  getTransactionById(transactionId) {
-    return this.transactions.find(t => t.id === transactionId) || null;
+  async getTransactionById(id, refresh = false) {
+    const localTransaction = this.transactions.find(t => t.id === id);
+    
+    if (refresh || !localTransaction) {
+      try {
+        // Try to get details from API
+        const apiResponse = await this.apiClient.getTransactionDetails(id);
+        
+        if (apiResponse) {
+          if (localTransaction) {
+            // Update existing transaction
+            const updatedTransaction = {
+              ...localTransaction,
+              status: apiResponse.status,
+              updated: new Date().toISOString(),
+              apiData: apiResponse
+            };
+            
+            // Update transaction in the array
+            const updatedTransactions = this.transactions.map(t => 
+              t.id === id ? updatedTransaction : t
+            );
+            
+            this.saveTransactions(updatedTransactions);
+            return updatedTransaction;
+          } else {
+            // Create new transaction record
+            const newTransaction = {
+              id: apiResponse.id,
+              name: apiResponse.name,
+              created: new Date().toISOString(),
+              updated: new Date().toISOString(),
+              status: apiResponse.status,
+              signers: apiResponse.roles ? apiResponse.roles.map(role => ({
+                id: role.id,
+                name: role.name,
+                email: role.email,
+                status: role.status || 'PENDING'
+              })) : [],
+              documents: [],
+              apiData: apiResponse,
+              history: [
+                {
+                  action: 'DISCOVERED',
+                  timestamp: new Date().toISOString(),
+                  details: 'Transaction discovered from API'
+                }
+              ]
+            };
+            
+            // Add to transactions array
+            const updatedTransactions = [...this.transactions, newTransaction];
+            this.saveTransactions(updatedTransactions);
+            return newTransaction;
+          }
+        }
+      } catch (error) {
+        console.error(`Error getting transaction ${id} from API:`, error);
+        // Continue with local data on error
+      }
+    }
+    
+    return localTransaction || null;
   }
 
   /**
-   * Resend a transaction
+   * Create a new signature transaction
+   * @param {Object} packageData - Package data
+   * @returns {Promise<Object>} Created transaction
+   */
+  async createTransaction(packageData) {
+    try {
+      const response = await this.apiClient.createPackage(packageData);
+      
+      // Create transaction record
+      const transaction = {
+        id: response.id,
+        name: packageData.name || 'Signature Package',
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        status: 'CREATED',
+        signers: [],
+        documents: [],
+        apiData: response,
+        history: [
+          {
+            action: 'CREATE',
+            timestamp: new Date().toISOString(),
+            details: 'Transaction created'
+          }
+        ]
+      };
+      
+      // Save to transactions array
+      const updatedTransactions = [...this.transactions, transaction];
+      this.saveTransactions(updatedTransactions);
+      
+      return transaction;
+    } catch (error) {
+      console.error('Error creating transaction:', error);
+      throw new Error(`Failed to create transaction: ${error.message}`);
+    }
+  }
+
+  /**
+   * Add a signer to a transaction
+   * @param {string} transactionId - Transaction ID
+   * @param {Object} signerData - Signer data
+   * @returns {Promise<Object>} Updated transaction
+   */
+  async addSigner(transactionId, signerData) {
+    try {
+      const transaction = await this.getTransactionById(transactionId);
+      if (!transaction) {
+        throw new Error(`Transaction not found: ${transactionId}`);
+      }
+      
+      // Add signer via API
+      const response = await this.apiClient.addSigner(transactionId, signerData);
+      
+      if (response && response.signers && response.signers.length > 0) {
+        const apiSigner = response.signers[0];
+        
+        // Create signer record
+        const signer = {
+          id: apiSigner.id,
+          name: `${signerData.firstName} ${signerData.lastName}`,
+          email: signerData.email,
+          role: apiSigner.id,
+          status: 'PENDING',
+          apiData: apiSigner
+        };
+        
+        // Update transaction
+        transaction.signers.push(signer);
+        transaction.updated = new Date().toISOString();
+        transaction.history.push({
+          action: 'ADD_SIGNER',
+          timestamp: new Date().toISOString(),
+          details: `Added signer: ${signerData.firstName} ${signerData.lastName} (${signerData.email})`
+        });
+        
+        // Save updated transaction
+        const updatedTransactions = this.transactions.map(t =>
+          t.id === transactionId ? transaction : t
+        );
+        this.saveTransactions(updatedTransactions);
+      }
+      
+      return transaction;
+    } catch (error) {
+      console.error(`Error adding signer to transaction ${transactionId}:`, error);
+      throw new Error(`Failed to add signer: ${error.message}`);
+    }
+  }
+
+  /**
+   * Add a document to a transaction
+   * @param {string} transactionId - Transaction ID
+   * @param {Object} file - Document file
+   * @returns {Promise<Object>} Result with transaction and document ID
+   */
+  async addDocument(transactionId, file) {
+    try {
+      const transaction = await this.getTransactionById(transactionId);
+      if (!transaction) {
+        throw new Error(`Transaction not found: ${transactionId}`);
+      }
+      
+      // Add document via API
+      const response = await this.apiClient.addDocument(transactionId, file);
+      
+      if (response && response.id) {
+        // Create document record
+        const document = {
+          id: response.id,
+          name: file.name || file.originalname || 'Document',
+          type: file.type || file.mimetype || 'application/pdf',
+          size: file.size,
+          status: 'ADDED',
+          apiData: response
+        };
+        
+        // Update transaction
+        transaction.documents.push(document);
+        transaction.updated = new Date().toISOString();
+        transaction.history.push({
+          action: 'ADD_DOCUMENT',
+          timestamp: new Date().toISOString(),
+          details: `Added document: ${document.name} (ID: ${document.id})`
+        });
+        
+        // Save updated transaction
+        const updatedTransactions = this.transactions.map(t =>
+          t.id === transactionId ? transaction : t
+        );
+        this.saveTransactions(updatedTransactions);
+        
+        return {
+          transaction,
+          documentId: document.id
+        };
+      } else {
+        throw new Error('Invalid response from API when adding document');
+      }
+    } catch (error) {
+      console.error(`Error adding document to transaction ${transactionId}:`, error);
+      throw new Error(`Failed to add document: ${error.message}`);
+    }
+  }
+
+  /**
+   * Add a signature field to a document
+   * @param {string} transactionId - Transaction ID
+   * @param {string} documentId - Document ID
+   * @param {string} roleId - Role ID of the signer
+   * @param {Object} fieldOptions - Field options
+   * @returns {Promise<Object>} Updated transaction
+   */
+  async addSignatureField(transactionId, documentId, roleId, fieldOptions) {
+    try {
+      const transaction = await this.getTransactionById(transactionId);
+      if (!transaction) {
+        throw new Error(`Transaction not found: ${transactionId}`);
+      }
+      
+      // Verify document exists
+      const documentExists = transaction.documents.some(doc => doc.id === documentId);
+      if (!documentExists) {
+        throw new Error(`Document not found in transaction: ${documentId}`);
+      }
+      
+      // Verify role exists
+      const signerExists = transaction.signers.some(signer => signer.role === roleId);
+      if (!signerExists) {
+        throw new Error(`Signer role not found in transaction: ${roleId}`);
+      }
+      
+      // Add signature field via API
+      await this.apiClient.addSignatureField(transactionId, documentId, roleId, fieldOptions);
+      
+      // Update transaction
+      transaction.updated = new Date().toISOString();
+      transaction.history.push({
+        action: 'ADD_SIGNATURE_FIELD',
+        timestamp: new Date().toISOString(),
+        details: `Added signature field to document ${documentId} for role ${roleId}`
+      });
+      
+      // Save updated transaction
+      const updatedTransactions = this.transactions.map(t =>
+        t.id === transactionId ? transaction : t
+      );
+      this.saveTransactions(updatedTransactions);
+      
+      return transaction;
+    } catch (error) {
+      console.error(`Error adding signature field to document ${documentId}:`, error);
+      throw new Error(`Failed to add signature field: ${error.message}`);
+    }
+  }
+
+  /**
+   * Send a transaction for signing
    * @param {string} transactionId - Transaction ID
    * @returns {Promise<Object>} Updated transaction
    */
-  async resend(transactionId) {
+  async sendTransaction(transactionId) {
     try {
-      const transaction = this.getTransactionById(transactionId);
-      
+      const transaction = await this.getTransactionById(transactionId);
       if (!transaction) {
-        throw new Error(`Transaction with ID ${transactionId} not found`);
+        throw new Error(`Transaction not found: ${transactionId}`);
       }
       
-      // Check if transaction is in a resendable state
-      if (transaction.status === 'CANCELLED' || transaction.status === 'COMPLETED') {
-        throw new Error(`Cannot resend transaction with status: ${transaction.status}`);
-      }
+      // Send package via API
+      await this.apiClient.sendPackage(transactionId);
       
-      // Call the API to resend
-      await this.apiClient.resendTransaction(transactionId);
+      // Update transaction
+      transaction.status = 'SENT';
+      transaction.updated = new Date().toISOString();
+      transaction.history.push({
+        action: 'SEND',
+        timestamp: new Date().toISOString(),
+        details: 'Transaction sent for signing'
+      });
       
-      // Update local record
-      const updatedTransaction = {
-        ...transaction,
-        resendCount: (transaction.resendCount || 0) + 1,
-        lastResent: new Date().toISOString()
-      };
+      // Save updated transaction
+      const updatedTransactions = this.transactions.map(t =>
+        t.id === transactionId ? transaction : t
+      );
+      this.saveTransactions(updatedTransactions);
       
-      this.updateTransaction(updatedTransaction);
-      return updatedTransaction;
+      return transaction;
     } catch (error) {
-      console.error(`Error resending transaction ${transactionId}:`, error);
-      throw error;
+      console.error(`Error sending transaction ${transactionId}:`, error);
+      throw new Error(`Failed to send transaction: ${error.message}`);
     }
   }
 
   /**
-   * Cancel a transaction
+   * Refresh a transaction's status from the API
    * @param {string} transactionId - Transaction ID
    * @returns {Promise<Object>} Updated transaction
    */
-  async cancel(transactionId) {
+  async refreshTransactionStatus(transactionId) {
     try {
-      const transaction = this.getTransactionById(transactionId);
-      
+      const transaction = await this.getTransactionById(transactionId);
       if (!transaction) {
-        throw new Error(`Transaction with ID ${transactionId} not found`);
+        throw new Error(`Transaction not found: ${transactionId}`);
       }
       
-      // Check if transaction is in a cancellable state
-      if (transaction.status === 'CANCELLED' || transaction.status === 'COMPLETED') {
-        throw new Error(`Cannot cancel transaction with status: ${transaction.status}`);
+      // Get signing status from API
+      const statusResponse = await this.apiClient.getSigningStatus(transactionId);
+      
+      if (statusResponse) {
+        // Update transaction status
+        const previousStatus = transaction.status;
+        transaction.status = statusResponse.status || transaction.status;
+        
+        // Update signers status
+        if (statusResponse.signers) {
+          statusResponse.signers.forEach(apiSigner => {
+            const signer = transaction.signers.find(s => s.id === apiSigner.id);
+            if (signer) {
+              signer.status = apiSigner.status || signer.status;
+            }
+          });
+        }
+        
+        transaction.updated = new Date().toISOString();
+        transaction.history.push({
+          action: 'REFRESH_STATUS',
+          timestamp: new Date().toISOString(),
+          details: `Status updated from '${previousStatus}' to '${transaction.status}'`
+        });
+        
+        // Save updated transaction
+        const updatedTransactions = this.transactions.map(t =>
+          t.id === transactionId ? transaction : t
+        );
+        this.saveTransactions(updatedTransactions);
       }
       
-      // Call the API to cancel
-      await this.apiClient.cancelTransaction(transactionId);
-      
-      // Update local record
-      const updatedTransaction = {
-        ...transaction,
-        status: 'CANCELLED',
-        cancelledAt: new Date().toISOString()
-      };
-      
-      this.updateTransaction(updatedTransaction);
-      return updatedTransaction;
+      return transaction;
     } catch (error) {
-      console.error(`Error cancelling transaction ${transactionId}:`, error);
-      throw error;
+      console.error(`Error refreshing transaction status for ${transactionId}:`, error);
+      throw new Error(`Failed to refresh transaction status: ${error.message}`);
     }
   }
 
   /**
-   * Mark a transaction as completed (for simulation)
+   * Resend notification to a signer
    * @param {string} transactionId - Transaction ID
-   * @returns {Object} Updated transaction
+   * @param {string} email - Signer email
+   * @param {string} message - Custom message
+   * @returns {Promise<Object>} Updated transaction
    */
-  completeTransaction(transactionId) {
-    const transaction = this.getTransactionById(transactionId);
-    
-    if (!transaction) {
-      throw new Error(`Transaction with ID ${transactionId} not found`);
+  async resendNotification(transactionId, email, message) {
+    try {
+      const transaction = await this.getTransactionById(transactionId);
+      if (!transaction) {
+        throw new Error(`Transaction not found: ${transactionId}`);
+      }
+      
+      // Check if signer exists
+      const signer = transaction.signers.find(s => s.email === email);
+      if (!signer) {
+        throw new Error(`Signer with email ${email} not found in transaction`);
+      }
+      
+      // Resend notification via API
+      await this.apiClient.resendNotification(transactionId, {
+        email,
+        message: message || `Please sign ${transaction.name}`
+      });
+      
+      // Update transaction
+      transaction.updated = new Date().toISOString();
+      transaction.history.push({
+        action: 'RESEND_NOTIFICATION',
+        timestamp: new Date().toISOString(),
+        details: `Notification resent to ${email}`
+      });
+      
+      // Save updated transaction
+      const updatedTransactions = this.transactions.map(t =>
+        t.id === transactionId ? transaction : t
+      );
+      this.saveTransactions(updatedTransactions);
+      
+      return transaction;
+    } catch (error) {
+      console.error(`Error resending notification for transaction ${transactionId}:`, error);
+      throw new Error(`Failed to resend notification: ${error.message}`);
     }
-    
-    // Check if transaction is in a completable state
-    if (transaction.status === 'CANCELLED' || transaction.status === 'COMPLETED') {
-      throw new Error(`Cannot complete transaction with status: ${transaction.status}`);
-    }
-    
-    // Update transaction status
-    const updatedTransaction = {
-      ...transaction,
-      status: 'COMPLETED',
-      completedAt: new Date().toISOString()
-    };
-    
-    this.updateTransaction(updatedTransaction);
-    return updatedTransaction;
   }
 
   /**
-   * Reset transactions to empty array
-   * @returns {Array} Empty array
+   * Cancel (delete) a transaction
+   * @param {string} transactionId - Transaction ID
+   * @returns {Promise<boolean>} Success status
+   */
+  async cancelTransaction(transactionId) {
+    try {
+      const transaction = await this.getTransactionById(transactionId);
+      if (!transaction) {
+        throw new Error(`Transaction not found: ${transactionId}`);
+      }
+      
+      // Cancel package via API
+      await this.apiClient.cancelPackage(transactionId);
+      
+      // Update transaction
+      transaction.status = 'CANCELED';
+      transaction.updated = new Date().toISOString();
+      transaction.history.push({
+        action: 'CANCEL',
+        timestamp: new Date().toISOString(),
+        details: 'Transaction canceled'
+      });
+      
+      // Save updated transaction
+      const updatedTransactions = this.transactions.map(t =>
+        t.id === transactionId ? transaction : t
+      );
+      this.saveTransactions(updatedTransactions);
+      
+      return true;
+    } catch (error) {
+      console.error(`Error canceling transaction ${transactionId}:`, error);
+      throw new Error(`Failed to cancel transaction: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get signing URL for a signer
+   * @param {string} transactionId - Transaction ID
+   * @param {string} roleId - Role ID
+   * @returns {Promise<string>} Signing URL
+   */
+  async getSigningUrl(transactionId, roleId) {
+    try {
+      const transaction = await this.getTransactionById(transactionId);
+      if (!transaction) {
+        throw new Error(`Transaction not found: ${transactionId}`);
+      }
+      
+      // Check if role exists
+      const signer = transaction.signers.find(s => s.role === roleId);
+      if (!signer) {
+        throw new Error(`Signer role ${roleId} not found in transaction`);
+      }
+      
+      // Get signing URL from API
+      const response = await this.apiClient.getSigningUrl(transactionId, roleId);
+      
+      if (response && response.url) {
+        // Update transaction history
+        transaction.updated = new Date().toISOString();
+        transaction.history.push({
+          action: 'GET_SIGNING_URL',
+          timestamp: new Date().toISOString(),
+          details: `Generated signing URL for role ${roleId}`
+        });
+        
+        // Save updated transaction
+        const updatedTransactions = this.transactions.map(t =>
+          t.id === transactionId ? transaction : t
+        );
+        this.saveTransactions(updatedTransactions);
+        
+        return response.url;
+      } else {
+        throw new Error('Signing URL not found in API response');
+      }
+    } catch (error) {
+      console.error(`Error getting signing URL for transaction ${transactionId}:`, error);
+      throw new Error(`Failed to get signing URL: ${error.message}`);
+    }
+  }
+
+  /**
+   * Reset all transactions data
+   * @returns {boolean} Success status
    */
   reset() {
-    this.saveTransactions([]);
-    return this.getAllTransactions();
-  }
-
-  /**
-   * Create a demo transaction for testing
-   * @param {Object} transactionData - Basic transaction data
-   * @returns {Object} Created transaction
-   */
-  createDemoTransaction(transactionData = {}) {
-    const demoTransaction = {
-      id: `demo-${Date.now()}`,
-      name: transactionData.name || 'Demo Contract',
-      recipient: transactionData.recipient || 'recipient@example.com',
-      status: 'SENT',
-      createdAt: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-      resendCount: 0,
-      ...transactionData
-    };
-    
-    this.updateTransaction(demoTransaction);
-    return demoTransaction;
+    return this.saveTransactions([]);
   }
 }
 

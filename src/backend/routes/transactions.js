@@ -1,148 +1,290 @@
 import express from 'express';
+import multer from 'multer';
 import TransactionManager from '../services/TransactionManager.js';
-import ConfigManager from '../services/ConfigManager.js';
 
 const router = express.Router();
 const transactionManager = new TransactionManager();
-const configManager = new ConfigManager();
 
-/**
- * Middleware to check if authentication token is valid
- */
-const requireAuth = (req, res, next) => {
-  if (!configManager.isTokenValid()) {
-    return res.status(401).json({ 
-      error: 'Authentication required',
-      message: 'Please generate a valid authentication token first' 
-    });
+// Setup multer for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
   }
-  next();
-};
+});
 
 /**
  * GET /api/transactions
- * Returns list of all transactions
+ * Get all transactions, optionally refreshed from API
  */
-router.get('/', requireAuth, (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const transactions = transactionManager.getAllTransactions();
-    res.json(transactions);
+    const refresh = req.query.refresh === 'true';
+    const transactions = await transactionManager.getAllTransactions(refresh);
+    res.json({ transactions });
   } catch (error) {
-    console.error('Error retrieving transactions:', error);
-    res.status(500).json({ error: 'Failed to retrieve transactions' });
+    console.error('Error fetching transactions:', error);
+    res.status(500).json({ error: 'Failed to fetch transactions' });
   }
 });
 
 /**
  * GET /api/transactions/:id
- * Returns a specific transaction by ID
+ * Get a transaction by ID
  */
-router.get('/:id', requireAuth, (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const transaction = transactionManager.getTransactionById(req.params.id);
+    const { id } = req.params;
+    const refresh = req.query.refresh === 'true';
+    
+    const transaction = await transactionManager.getTransactionById(id, refresh);
     
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
     
-    res.json(transaction);
+    res.json({ transaction });
   } catch (error) {
-    console.error(`Error retrieving transaction ${req.params.id}:`, error);
-    res.status(500).json({ error: 'Failed to retrieve transaction' });
+    console.error(`Error fetching transaction ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Failed to fetch transaction' });
   }
 });
 
 /**
- * POST /api/transactions/:id/resend
- * Resends a transaction invitation
+ * POST /api/transactions
+ * Create a new transaction
  */
-router.post('/:id/resend', requireAuth, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const updatedTransaction = await transactionManager.resend(req.params.id);
-    res.json(updatedTransaction);
+    const packageData = req.body;
+    
+    // Validate name
+    if (!packageData.name) {
+      return res.status(400).json({ error: 'Transaction name is required' });
+    }
+    
+    const transaction = await transactionManager.createTransaction(packageData);
+    res.status(201).json({ transaction });
   } catch (error) {
-    console.error(`Error resending transaction ${req.params.id}:`, error);
-    
-    // Determine appropriate status code
-    const statusCode = error.message.includes('not found') ? 404 : 
-                      error.message.includes('status') ? 400 : 500;
-    
-    res.status(statusCode).json({ error: error.message });
+    console.error('Error creating transaction:', error);
+    res.status(500).json({ error: `Failed to create transaction: ${error.message}` });
   }
 });
 
 /**
- * POST /api/transactions/:id/cancel
- * Cancels a transaction
+ * POST /api/transactions/:id/signers
+ * Add a signer to a transaction
  */
-router.post('/:id/cancel', requireAuth, async (req, res) => {
+router.post('/:id/signers', async (req, res) => {
   try {
-    const updatedTransaction = await transactionManager.cancel(req.params.id);
-    res.json(updatedTransaction);
+    const { id } = req.params;
+    const signerData = req.body;
+    
+    // Validate required fields
+    if (!signerData.firstName || !signerData.lastName || !signerData.email) {
+      return res.status(400).json({ 
+        error: 'Signer first name, last name, and email are required' 
+      });
+    }
+    
+    const transaction = await transactionManager.addSigner(id, signerData);
+    res.json({ transaction });
   } catch (error) {
-    console.error(`Error cancelling transaction ${req.params.id}:`, error);
+    console.error(`Error adding signer to transaction ${req.params.id}:`, error);
     
-    // Determine appropriate status code
-    const statusCode = error.message.includes('not found') ? 404 : 
-                      error.message.includes('status') ? 400 : 500;
-    
-    res.status(statusCode).json({ error: error.message });
+    if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: `Failed to add signer: ${error.message}` });
+    }
   }
 });
 
 /**
- * POST /api/transactions/:id/complete
- * Marks a transaction as completed (for simulation purposes)
+ * POST /api/transactions/:id/documents
+ * Add a document to a transaction
  */
-router.post('/:id/complete', (req, res) => {
+router.post('/:id/documents', upload.single('file'), async (req, res) => {
   try {
-    const updatedTransaction = transactionManager.completeTransaction(req.params.id);
-    res.json(updatedTransaction);
+    const { id } = req.params;
+    
+    // Check if file was uploaded
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    const result = await transactionManager.addDocument(id, req.file);
+    res.json(result);
   } catch (error) {
-    console.error(`Error completing transaction ${req.params.id}:`, error);
+    console.error(`Error adding document to transaction ${req.params.id}:`, error);
     
-    // Determine appropriate status code
-    const statusCode = error.message.includes('not found') ? 404 : 
-                      error.message.includes('status') ? 400 : 500;
-    
-    res.status(statusCode).json({ error: error.message });
+    if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: `Failed to add document: ${error.message}` });
+    }
   }
 });
 
 /**
- * POST /api/transactions/demo
- * Creates a demo transaction for testing
+ * POST /api/transactions/:id/documents/:documentId/fields
+ * Add a signature field to a document
  */
-router.post('/demo', requireAuth, (req, res) => {
+router.post('/:id/documents/:documentId/fields', async (req, res) => {
   try {
-    const userEmail = configManager.getConfig().userEmail;
+    const { id, documentId } = req.params;
+    const { roleId, ...fieldOptions } = req.body;
     
-    // Create a demo transaction using the authenticated user's email
-    const demoData = {
-      name: req.body.name || 'Demo Contract',
-      recipient: req.body.recipient || userEmail,
-      ...req.body
-    };
+    // Validate required field
+    if (!roleId) {
+      return res.status(400).json({ error: 'Signer role ID is required' });
+    }
     
-    const demoTransaction = transactionManager.createDemoTransaction(demoData);
-    res.json(demoTransaction);
+    const transaction = await transactionManager.addSignatureField(
+      id, documentId, roleId, fieldOptions
+    );
+    
+    res.json({ transaction });
   } catch (error) {
-    console.error('Error creating demo transaction:', error);
-    res.status(500).json({ error: 'Failed to create demo transaction' });
+    console.error(`Error adding signature field to document:`, error);
+    
+    if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: `Failed to add signature field: ${error.message}` });
+    }
+  }
+});
+
+/**
+ * POST /api/transactions/:id/send
+ * Send a transaction for signing
+ */
+router.post('/:id/send', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const transaction = await transactionManager.sendTransaction(id);
+    res.json({ transaction });
+  } catch (error) {
+    console.error(`Error sending transaction ${req.params.id}:`, error);
+    
+    if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: `Failed to send transaction: ${error.message}` });
+    }
+  }
+});
+
+/**
+ * POST /api/transactions/:id/refresh
+ * Refresh a transaction's status from the API
+ */
+router.post('/:id/refresh', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const transaction = await transactionManager.refreshTransactionStatus(id);
+    res.json({ transaction });
+  } catch (error) {
+    console.error(`Error refreshing transaction ${req.params.id}:`, error);
+    
+    if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: `Failed to refresh transaction: ${error.message}` });
+    }
+  }
+});
+
+/**
+ * POST /api/transactions/:id/notifications
+ * Resend notification to a signer
+ */
+router.post('/:id/notifications', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email, message } = req.body;
+    
+    // Validate email
+    if (!email) {
+      return res.status(400).json({ error: 'Signer email is required' });
+    }
+    
+    const transaction = await transactionManager.resendNotification(id, email, message);
+    res.json({ transaction });
+  } catch (error) {
+    console.error(`Error resending notification for transaction ${req.params.id}:`, error);
+    
+    if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: `Failed to resend notification: ${error.message}` });
+    }
+  }
+});
+
+/**
+ * DELETE /api/transactions/:id
+ * Cancel a transaction
+ */
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const success = await transactionManager.cancelTransaction(id);
+    
+    if (success) {
+      res.json({ success: true, message: 'Transaction canceled successfully' });
+    } else {
+      res.status(500).json({ error: 'Failed to cancel transaction' });
+    }
+  } catch (error) {
+    console.error(`Error canceling transaction ${req.params.id}:`, error);
+    
+    if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: `Failed to cancel transaction: ${error.message}` });
+    }
+  }
+});
+
+/**
+ * GET /api/transactions/:id/signingUrl/:roleId
+ * Get signing URL for a signer
+ */
+router.get('/:id/signingUrl/:roleId', async (req, res) => {
+  try {
+    const { id, roleId } = req.params;
+    const url = await transactionManager.getSigningUrl(id, roleId);
+    res.json({ url });
+  } catch (error) {
+    console.error(`Error getting signing URL for transaction ${req.params.id}:`, error);
+    
+    if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: `Failed to get signing URL: ${error.message}` });
+    }
   }
 });
 
 /**
  * POST /api/transactions/reset
- * Resets all transactions
+ * Reset all transactions
  */
 router.post('/reset', (req, res) => {
   try {
-    const emptyTransactions = transactionManager.reset();
-    res.json(emptyTransactions);
+    const success = transactionManager.reset();
+    
+    if (success) {
+      res.json({ success: true, message: 'All transactions have been reset' });
+    } else {
+      res.status(500).json({ error: 'Failed to reset transactions' });
+    }
   } catch (error) {
     console.error('Error resetting transactions:', error);
-    res.status(500).json({ error: 'Failed to reset transactions' });
+    res.status(500).json({ error: `Failed to reset transactions: ${error.message}` });
   }
 });
 

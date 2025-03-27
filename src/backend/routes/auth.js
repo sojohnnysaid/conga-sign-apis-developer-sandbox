@@ -7,41 +7,37 @@ const configManager = new ConfigManager();
 const apiClient = new CongaApiClient();
 
 /**
- * POST /api/auth
+ * POST /api/auth/token
  * Generates an authentication token using the stored configuration
  */
-router.post('/', async (req, res) => {
+router.post('/token', async (req, res) => {
   try {
-    // Get the current configuration (including secret)
-    const config = configManager.getConfig(true);
-    
     // Check if we have the necessary credentials
-    if (!config.clientId || !config.clientSecret || !config.userEmail) {
+    if (!configManager.isInitialized()) {
       return res.status(400).json({ 
-        error: 'Missing credentials. Please configure Client ID, Client Secret, and User Email first.' 
+        success: false,
+        error: 'Missing credentials. Please configure Client ID, Client Secret, and Platform Email first.' 
       });
     }
     
     // Generate token
-    const token = await apiClient.fetchAuthToken(
-      config.clientId,
-      config.clientSecret,
-      config.userEmail,
-      config.environment
-    );
+    const token = await apiClient.authenticate();
     
-    // Return success response (don't include the token itself for security)
+    // Return success response with masked token
+    const maskedToken = token ? `${token.substring(0, 10)}...${token.substring(token.length - 5)}` : null;
+    
     res.json({ 
       success: true, 
       message: 'Authentication token generated successfully',
-      status: 'valid'
+      token: maskedToken,
+      expiresAt: configManager.getConfig().tokenExpiry
     });
   } catch (error) {
     console.error('Error generating auth token:', error);
     res.status(500).json({ 
+      success: false,
       error: 'Failed to generate authentication token', 
-      message: error.message,
-      status: 'invalid' 
+      message: error.message
     });
   }
 });
@@ -53,13 +49,49 @@ router.post('/', async (req, res) => {
 router.get('/status', (req, res) => {
   try {
     const isValid = configManager.isTokenValid();
+    const config = configManager.getConfig();
+    
     res.json({ 
       valid: isValid,
-      status: isValid ? 'valid' : 'invalid'
+      initialized: configManager.isInitialized(),
+      expiresAt: config.tokenExpiry ? new Date(config.tokenExpiry).toISOString() : null
     });
   } catch (error) {
     console.error('Error checking token status:', error);
     res.status(500).json({ error: 'Failed to check token status' });
+  }
+});
+
+/**
+ * POST /api/auth/revoke
+ * Revokes the current token
+ */
+router.post('/revoke', (req, res) => {
+  try {
+    // Update config with null token
+    const success = configManager.updateConfig({
+      accessToken: null,
+      tokenExpiry: null
+    });
+    
+    if (success) {
+      res.json({ 
+        success: true, 
+        message: 'Token revoked successfully' 
+      });
+    } else {
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to revoke token' 
+      });
+    }
+  } catch (error) {
+    console.error('Error revoking token:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to revoke token',
+      message: error.message
+    });
   }
 });
 
