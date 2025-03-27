@@ -10,6 +10,14 @@ All API endpoints are prefixed with `/api`. When running locally, the full base 
 http://localhost:3000/api
 ```
 
+When using ngrok for local development with external APIs (recommended), the base URL would be:
+
+```
+https://your-ngrok-domain.ngrok-free.app/api
+```
+
+Note: Using ngrok or a similar tunneling service is recommended for local development when connecting to external APIs and receiving webhooks.
+
 ## Authentication
 
 Most endpoints require authentication with a valid Conga Sign API token. The token is generated using the `/api/auth/token` endpoint and is automatically included in subsequent requests by the frontend. For external API calls, include the token in the `Authorization` header:

@@ -17,7 +17,7 @@
   ];
 
   // API endpoints
-  const API_URL = '/api';
+  const API_URL = 'http://localhost:3000/api';
 
   // Load current configuration on component mount
   export async function loadConfig() {

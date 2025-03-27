@@ -13,7 +13,7 @@
       healthStatus = 'Checking...';
       healthError = false;
       
-      const response = await fetch('/api/health');
+      const response = await fetch('http://localhost:3000/api/health');
       const data = await response.json();
       
       if (response.ok) {
@@ -36,7 +36,7 @@
   // Create sample data for demo purposes
   async function createSampleData() {
     try {
-      const response = await fetch('/api/sample-data', {
+      const response = await fetch('http://localhost:3000/api/sample-data', {
         method: 'POST'
       });
       

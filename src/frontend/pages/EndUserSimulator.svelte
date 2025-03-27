@@ -14,7 +14,7 @@
   let transactions = [];
   
   // API URL
-  const API_URL = '/api';
+  const API_URL = 'http://localhost:3000/api';
   
   // Load all transactions for selection
   export async function loadTransactions() {

@@ -13,7 +13,7 @@
       error = '';
       message = '';
       
-      const response = await fetch('/api/reset', {
+      const response = await fetch('http://localhost:3000/api/reset', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

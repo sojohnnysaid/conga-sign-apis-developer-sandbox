@@ -129,6 +129,38 @@ A reset mechanism allows clearing state to quickly return to a clean starting po
 
 ## Developer Notes
 
+### Local Development with External APIs
+
+When running this application locally, you may encounter issues with the authentication token generation and other API calls that require access to external Conga Sign API endpoints. This is because:
+
+1. Local development environments may not have direct access to the internet
+2. Callbacks from Conga Sign need a publicly accessible URL to reach your application
+
+**Solution for Local Development:**
+
+Use a tunneling service like ngrok to expose your local server to the internet:
+
+```bash
+# Install ngrok
+npm install -g ngrok
+
+# Start the application
+npm run dev
+
+# In a separate terminal, expose your backend server
+ngrok http 3000
+```
+
+You'll get a URL like `https://xxxx-xxxx-xxxx.ngrok-free.app` which you can use as your callback URL in the configuration.
+
+For a more stable setup, you can use a reserved domain:
+
+```bash
+ngrok http --domain your-reserved-domain.ngrok-free.app 3000
+```
+
+**Note:** This is only needed for local development. When deployed to a cloud platform like Replit, the application will be publicly accessible and can communicate with external APIs without any tunneling.
+
 ### Testing Approach
 
 - **IMPORTANT**: All tests MUST pass before committing to the repository

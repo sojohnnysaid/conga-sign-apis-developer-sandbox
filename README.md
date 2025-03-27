@@ -54,6 +54,24 @@ This will start:
 
 The frontend is configured to proxy API requests to the backend automatically.
 
+#### Local Development with External APIs
+
+When developing locally, you might need a tunnel to the internet for API callbacks:
+
+```bash
+# Install ngrok
+npm install -g ngrok
+
+# Expose your backend to the internet
+ngrok http 3000
+# Or with a reserved domain:
+ngrok http --domain your-domain.ngrok-free.app 3000
+```
+
+Use the provided HTTPS URL as your callback URL in the Config page.
+
+Note: This is only needed for local development. In cloud environments like Replit, the application will be publicly accessible without tunneling.
+
 ### Features
 
 - **Configuration Page**: Setup and manage your Conga Sign API credentials

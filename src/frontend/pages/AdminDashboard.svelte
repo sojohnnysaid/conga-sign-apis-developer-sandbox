@@ -11,7 +11,7 @@
   let messageType = 'info';
   
   // API URL
-  const API_URL = '/api';
+  const API_URL = 'http://localhost:3000/api';
   
   // Load all transactions
   export async function loadTransactions(refresh = false) {
