@@ -5,21 +5,39 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import ConfigManager from '../../../../src/backend/services/ConfigManager.js';
 
+// Mock url module
+vi.mock('url', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    fileURLToPath: vi.fn().mockReturnValue('/mock/path/ConfigManager.js')
+  };
+});
+
 // Mock fs module
-vi.mock('fs', () => ({
-  existsSync: vi.fn(),
-  mkdirSync: vi.fn(),
-  readFileSync: vi.fn(),
-  writeFileSync: vi.fn()
-}));
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    existsSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    readFileSync: vi.fn(),
+    writeFileSync: vi.fn()
+  };
+});
 
 // Mock path module
-vi.mock('path', () => ({
-  dirname: vi.fn().mockReturnValue('/mock/directory'),
-  join: vi.fn().mockReturnValue('/mock/directory/config.json')
-}));
+vi.mock('path', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    dirname: vi.fn().mockReturnValue('/mock/directory'),
+    join: vi.fn().mockReturnValue('/mock/directory/config.json')
+  };
+});
 
 describe('ConfigManager', () => {
   let configManager;
